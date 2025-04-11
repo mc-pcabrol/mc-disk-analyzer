@@ -1,19 +1,24 @@
 <?php
 /*
 Plugin Name: MC Disk Analyzer
+Plugin URI: https://github.com/mc-pcabrol/plugin-mc-disk-analyzer
 Description: Visualisez les fichiers et dossiers les plus lourds de votre site WordPress. Développé par Pierre Cabrol.
-Version: 0.1
+Version: 0.1.2
 Author: Pierre Cabrol
 Author URI: https://www.midiconcept.fr
+License: MIT
+License URI: https://opensource.org/licenses/MIT
 */
+
 require plugin_dir_path(__FILE__) . 'plugin-update-checker/plugin-update-checker.php';
 
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
 $updateChecker = PucFactory::buildUpdateChecker(
-    'https://github.com/PierreCabrol/mc-disk-analyzer/',
+    'https://github.com/mc-pcabrol/plugin-mc-disk-analyzer/',
     __FILE__,
-    'mc-disk-analyzer'
+    'mc-disk-analyzer',
+    '/mc-disk-analyzer' // <- chemin relatif dans le repo
 );
 
 $updateChecker->getVcsApi()->enableReleaseAssets();
@@ -63,7 +68,7 @@ function mc_disk_analyzer_page() {
         'labels' => array_map(function($f) { return str_replace(ABSPATH, '', $f); }, array_keys($results['folders'])),
         'sizes' => array_values($results['folders']),
     ];
-    echo '<canvas id="mc-disk-chart" data-chart='' . json_encode($chart_data) . '' width="600" height="300"></canvas>';
+    echo '<canvas id="mc-disk-chart" width="600" height="300" data-chart="' . esc_attr(json_encode($chart_data)) . '"></canvas>';
 
     // Scanner les sous-dossiers de wp-content/uploads
     $uploads = WP_CONTENT_DIR . '/uploads';
@@ -79,7 +84,7 @@ function mc_disk_analyzer_page() {
             'labels' => array_keys($upload_data),
             'sizes' => array_values($upload_data),
         ];
-        echo '<canvas id="mc-disk-chart-uploads" data-chart='' . json_encode($upload_chart) . '' width="600" height="300"></canvas>';
+        echo '<canvas id="mc-disk-chart-uploads" width="600" height="300" data-chart="' . esc_attr(json_encode($upload_chart)) . '"></canvas>';
     }
 
     echo '</div>';
