@@ -68,6 +68,7 @@ function mc_disk_analyzer_page() {
                 .then(response => response.text())
                 .then(html => {
                     results.innerHTML = html;
+                    renderMCCharts(); 
                 })
                 .catch(error => {
                     results.innerHTML = '<p>Erreur lors du chargement des données.</p>';
