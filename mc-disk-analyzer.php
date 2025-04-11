@@ -3,7 +3,7 @@
 Plugin Name: MC Disk Analyzer
 Plugin URI: https://github.com/mc-pcabrol/plugin-mc-disk-analyzer
 Description: Visualisez les fichiers et dossiers les plus lourds de votre site WordPress. Développé par Pierre Cabrol.
-Version: 0.5.0
+Version: 0.4.0
 Author: Pierre Cabrol
 Author URI: https://www.midiconcept.fr
 License: MIT
