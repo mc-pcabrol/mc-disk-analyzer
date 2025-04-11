@@ -14,7 +14,7 @@ require plugin_dir_path(__FILE__) . 'plugin-update-checker/plugin-update-checker
 use YahnisElsts\PluginUpdateChecker\v5\PucFactory;
 
 $updateChecker = PucFactory::buildUpdateChecker(
-    'https://github.com/mc-pcabrol/plugin-mc-disk-analyzer/',
+    'https://github.com/mc-pcabrol/mc-disk-analyzer/',
     __FILE__,
     'mc-disk-analyzer'
 );
