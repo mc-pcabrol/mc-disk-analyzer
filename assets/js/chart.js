@@ -20,6 +20,19 @@ function renderMCCharts() {
                 plugins: {
                     legend: {
                         position: 'bottom'
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const value = context.raw;
+                                const mo = value / 1024 / 1024;
+                                if (mo < 1024) {
+                                    return `${context.label}: ${mo.toFixed(1)} Mo`;
+                                } else {
+                                    return `${context.label}: ${(mo / 1024).toFixed(2)} Go`;
+                                }
+                            }
+                        }
                     }
                 }
             }

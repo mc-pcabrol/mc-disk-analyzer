@@ -3,7 +3,7 @@
 Plugin Name: MC Disk Analyzer
 Plugin URI: https://github.com/mc-pcabrol/plugin-mc-disk-analyzer
 Description: Visualisez les fichiers et dossiers les plus lourds de votre site WordPress. Développé par Pierre Cabrol.
-Version: 0.4.0
+Version: 0.6.1
 Author: Pierre Cabrol
 Author URI: https://www.midiconcept.fr
 License: MIT
@@ -24,6 +24,7 @@ add_action('admin_menu', function () {
     add_action('admin_enqueue_scripts', function() {
         wp_enqueue_script('chartjs', 'https://cdn.jsdelivr.net/npm/chart.js', [], null, true);
         wp_enqueue_script('mc-disk-chart', plugin_dir_url(__FILE__) . 'assets/js/chart.js', ['chartjs'], null, true);
+        wp_enqueue_style('mc-disk-style', plugin_dir_url(__FILE__) . 'assets/css/admin.css');
     });
 
     add_menu_page(
@@ -54,6 +55,13 @@ function mc_disk_analyzer_page() {
             <option value="1024">1 Go</option>
         </select>
 
+        <p>
+            <label>
+                <input type="checkbox" id="mc-disk-include-core" />
+                Inclure les dossiers core de WordPress (wp-admin, wp-includes, plugins)
+            </label>
+        </p>
+
         <div id="mc-disk-results" style="margin-top: 30px;">
             <p>Chargement...</p>
         </div>
@@ -61,14 +69,17 @@ function mc_disk_analyzer_page() {
 
     <script>
     document.addEventListener('DOMContentLoaded', function () {
-        function loadResults(threshold) {
+        const select = document.getElementById('mc-disk-threshold');
+        const includeCore = document.getElementById('mc-disk-include-core');
+
+        function loadResults(threshold, include_core) {
             const results = document.getElementById('mc-disk-results');
             results.innerHTML = '<p>Chargement...</p>';
-            fetch(ajaxurl + '?action=mc_disk_analyzer_load&threshold=' + threshold)
+            fetch(ajaxurl + '?action=mc_disk_analyzer_load&threshold=' + threshold + '&include_core=' + (include_core ? '1' : '0'))
                 .then(response => response.text())
                 .then(html => {
                     results.innerHTML = html;
-                    renderMCCharts(); 
+                    if (typeof renderMCCharts === 'function') renderMCCharts();
                 })
                 .catch(error => {
                     results.innerHTML = '<p>Erreur lors du chargement des données.</p>';
@@ -76,9 +87,15 @@ function mc_disk_analyzer_page() {
                 });
         }
 
-        const select = document.getElementById('mc-disk-threshold');
-        loadResults(select.value);
-        select.addEventListener('change', () => loadResults(select.value));
+        loadResults(select.value, includeCore.checked);
+
+        select.addEventListener('change', () => {
+            loadResults(select.value, includeCore.checked);
+        });
+
+        includeCore.addEventListener('change', () => {
+            loadResults(select.value, includeCore.checked);
+        });
     });
     </script>
     <?php
@@ -90,9 +107,10 @@ function mc_disk_analyzer_ajax() {
     }
 
     $threshold = isset($_GET['threshold']) ? intval($_GET['threshold']) : 5;
+    $include_core = isset($_GET['include_core']) && $_GET['include_core'] === '1';
     $min_size = $threshold * 1024 * 1024;
 
-    $results = mc_disk_analyzer_scan(ABSPATH, $min_size);
+    $results = mc_disk_analyzer_scan(ABSPATH, $min_size, !$include_core);
 
     echo '<h2>Top fichiers > ' . esc_html($threshold) . ' Mo</h2>';
     echo '<table class="widefat"><thead><tr><th>Fichier</th><th>Taille</th></tr></thead><tbody>';
@@ -111,10 +129,12 @@ function mc_disk_analyzer_ajax() {
     // Graphiques
     echo '<h2>Graphique global</h2>';
     $chart_data = [
-        'labels' => array_map(function($f) { return str_replace(ABSPATH, '', $f); }, array_keys($results['folders'])),
-        'sizes' => array_values($results['folders']),
+        'labels' => array_slice(array_map(function($f) {
+            return str_replace(ABSPATH, '', $f);
+        }, array_keys($results['folders'])), 0, 10),
+        'sizes' => array_slice(array_values($results['folders']), 0, 10),
     ];
-    echo '<canvas id="mc-disk-chart" width="500" height="300" data-chart="' . esc_attr(json_encode($chart_data)) . '"></canvas>';
+    echo '<div class="mc-disk-chart-container"><canvas id="mc-disk-chart" width="500" height="300" data-chart="' . esc_attr(json_encode($chart_data)) . '"></canvas></div>';
 
     $uploads = WP_CONTENT_DIR . '/uploads';
     if (file_exists($uploads)) {
@@ -126,16 +146,15 @@ function mc_disk_analyzer_ajax() {
         }
         arsort($upload_data);
         $upload_chart = [
-            'labels' => array_keys($upload_data),
-            'sizes' => array_values($upload_data),
+            'labels' => array_slice(array_keys($upload_data), 0, 10),
+            'sizes' => array_slice(array_values($upload_data), 0, 10),
         ];
-        echo '<canvas id="mc-disk-chart-uploads" width="500" height="300" data-chart="' . esc_attr(json_encode($upload_chart)) . '"></canvas>';
+        echo '<div class="mc-disk-chart-container"><canvas id="mc-disk-chart-uploads" width="500" height="300" data-chart="' . esc_attr(json_encode($upload_chart)) . '"></canvas>';
     }
-
     wp_die();
 }
 
-function mc_disk_analyzer_scan($dir, $min_file_size = 5242880) {
+function mc_disk_analyzer_scan($dir, $min_file_size = 5242880, $exclude_core = true) {
     $large_files = [];
     $folders = [];
 
@@ -146,15 +165,24 @@ function mc_disk_analyzer_scan($dir, $min_file_size = 5242880) {
 
     foreach ($iterator as $file) {
         try {
+            $path = $file->getPathname();
+
+            if ($exclude_core && (
+                strpos($path, ABSPATH . 'wp-admin') === 0 ||
+                strpos($path, ABSPATH . 'wp-includes') === 0 ||
+                strpos($path, WP_CONTENT_DIR . '/plugins') === 0
+            )) {
+                continue;
+            }
+
             if ($file->isFile()) {
                 $size = $file->getSize();
                 if ($size >= $min_file_size) {
-                    $large_files[$file->getPathname()] = $size;
+                    $large_files[$path] = $size;
                 }
             } elseif ($file->isDir()) {
-                $folder = $file->getPathname();
-                if (!isset($folders[$folder])) {
-                    $folders[$folder] = mc_folder_size($folder);
+                if (!isset($folders[$path])) {
+                    $folders[$path] = mc_folder_size($path);
                 }
             }
         } catch (Exception $e) {}
